@@ -1,0 +1,11 @@
+[package]
+name = "sse-server"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+rocket = "0.5.0-rc.1"
+branca = "^0.10.0"
+serde = "^1.0.126"
+rmp-serde = "^0.15.5"
+hex = "^0.4.3"
