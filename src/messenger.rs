@@ -119,6 +119,11 @@ impl MessengerWorker {
     }
 
     fn unsubscribe(&mut self, id: u64) {
+        if self.sender_by_id.remove(&id).is_none() {
+            // Previously unsubscribed, possibly because of an error condition.
+            return;
+        }
+
         let topics = self.topics_by_id.remove(&id).unwrap();
         for topic in topics.iter() {
             let fetched_ids = self.ids_by_topic.get_mut(topic).unwrap();
@@ -127,15 +132,23 @@ impl MessengerWorker {
                 self.ids_by_topic.remove(topic);
             }
         }
-        self.sender_by_id.remove(&id);
     }
 
     fn deliver(&mut self, topic: String, event: Event) {
         if let Some(receivers) = self.ids_by_topic.get(&topic) {
             let evt_arc = Arc::new(event);
-            for id in receivers.iter() {
+            let mut failures: Vec<u64> = Vec::new();
+            for id in receivers {
                 let sender = self.sender_by_id.get(id).unwrap();
-                sender.try_send(evt_arc.clone()).unwrap(); // XXX Handle errors
+                match sender.try_send(evt_arc.clone()) {
+                    Err(_) => failures.push(*id),
+                    Ok(()) => {}
+                };
+            }
+            if !failures.is_empty() {
+                for id in failures {
+                    self.unsubscribe(id);
+                }
             }
         }
     }
