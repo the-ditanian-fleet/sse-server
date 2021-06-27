@@ -74,6 +74,9 @@ fn submit(encoded: String, messager: &State<messenger::Messenger>, config: &Stat
     }
 }
 
+#[get("/ping")]
+fn ping() {}
+
 #[launch]
 async fn rocket() -> _ {
     let env_key = std::env::var("SSE_SECRET");
@@ -94,5 +97,5 @@ async fn rocket() -> _ {
             signature_lifetime: 86400,
         })
         .attach(cors::CORS)
-        .mount("/", routes![submit, events])
+        .mount("/", routes![submit, events, ping])
 }
