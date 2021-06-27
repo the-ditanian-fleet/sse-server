@@ -90,47 +90,70 @@ impl Drop for Messenger {
     }
 }
 
-fn worker() -> thread_mpsc::Sender<Instruction> {
-    let (tx, rx) = thread_mpsc::channel();
-    thread::spawn(move || {
-        let mut topics_by_id: HashMap<u64, Vec<String>> = HashMap::new();
-        let mut sender_by_id: HashMap<u64, tokio_mpsc::Sender<Arc<Event>>> = HashMap::new();
-        let mut ids_by_topic: HashMap<String, HashSet<u64>> = HashMap::new();
+struct MessengerWorker {
+    rx: thread_mpsc::Receiver<Instruction>,
+    topics_by_id: HashMap<u64, Vec<String>>,
+    sender_by_id: HashMap<u64, tokio_mpsc::Sender<Arc<Event>>>,
+    ids_by_topic: HashMap<String, HashSet<u64>>,
+}
 
+impl MessengerWorker {
+    fn new(rx: thread_mpsc::Receiver<Instruction>) -> MessengerWorker {
+        MessengerWorker {
+            rx: rx,
+            topics_by_id: HashMap::new(),
+            sender_by_id: HashMap::new(),
+            ids_by_topic: HashMap::new(),
+        }
+    }
+
+    fn subscribe(&mut self, id: u64, sender: tokio_mpsc::Sender<Arc<Event>>, topics: Vec<String>) {
+        for topic in topics.iter() {
+            if !self.ids_by_topic.contains_key(topic) {
+                self.ids_by_topic.insert(topic.clone(), HashSet::new());
+            }
+            self.ids_by_topic.get_mut(topic).unwrap().insert(id);
+        }
+        self.topics_by_id.insert(id, topics);
+        self.sender_by_id.insert(id, sender);
+    }
+
+    fn unsubscribe(&mut self, id: u64) {
+        let topics = self.topics_by_id.remove(&id).unwrap();
+        for topic in topics.iter() {
+            let fetched_ids = self.ids_by_topic.get_mut(topic).unwrap();
+            fetched_ids.remove(&id);
+            if fetched_ids.is_empty() {
+                self.ids_by_topic.remove(topic);
+            }
+        }
+        self.sender_by_id.remove(&id);
+    }
+
+    fn deliver(&mut self, topic: String, event: Event) {
+        if let Some(receivers) = self.ids_by_topic.get(&topic) {
+            let evt_arc = Arc::new(event);
+            for id in receivers.iter() {
+                let sender = self.sender_by_id.get(id).unwrap();
+                sender.try_send(evt_arc.clone()).unwrap(); // XXX Handle errors
+            }
+        }
+    }
+
+    fn run(mut self) {
         loop {
-            let msg = rx.recv().unwrap();
+            let msg = self.rx.recv().unwrap();
             match msg {
                 Instruction::Message(topic, evt) => {
-                    let evt_arc = Arc::new(evt);
-                    if let Some(receivers) = ids_by_topic.get(&topic) {
-                        for id in receivers.iter() {
-                            let sender = sender_by_id.get(id).unwrap();
-                            sender.try_send(evt_arc.clone()).unwrap(); // XXX Handle errors
-                        }
-                    }
+                    self.deliver(topic, evt);
                 }
 
                 Instruction::Subscribe(id, sender, topics) => {
-                    for topic in topics.iter() {
-                        if !ids_by_topic.contains_key(topic) {
-                            ids_by_topic.insert(topic.clone(), HashSet::new());
-                        }
-                        ids_by_topic.get_mut(topic).unwrap().insert(id);
-                    }
-                    topics_by_id.insert(id, topics);
-                    sender_by_id.insert(id, sender);
+                    self.subscribe(id, sender, topics);
                 }
 
                 Instruction::Unsubscribe(id) => {
-                    let topics = topics_by_id.remove(&id).unwrap();
-                    for topic in topics.iter() {
-                        let fetched_ids = ids_by_topic.get_mut(topic).unwrap();
-                        fetched_ids.remove(&id);
-                        if fetched_ids.is_empty() {
-                            ids_by_topic.remove(topic);
-                        }
-                    }
-                    sender_by_id.remove(&id);
+                    self.unsubscribe(id);
                 }
 
                 Instruction::Stop => break,
@@ -138,8 +161,16 @@ fn worker() -> thread_mpsc::Sender<Instruction> {
         }
         println!(
             "Worker end. {:?} {:?} {:?}",
-            topics_by_id, sender_by_id, ids_by_topic
+            self.topics_by_id, self.sender_by_id, self.ids_by_topic
         );
+    }
+}
+
+fn worker() -> thread_mpsc::Sender<Instruction> {
+    let (tx, rx) = thread_mpsc::channel();
+    thread::spawn(move || {
+        let worker = MessengerWorker::new(rx);
+        worker.run();
     });
     tx
 }
