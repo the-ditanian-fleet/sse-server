@@ -13,4 +13,7 @@ RUN cargo build --release
 
 FROM alpine
 COPY --from=builder /sse-server/target/release/sse-server /sse-server
+ADD Rocket.toml .
+
 ENTRYPOINT /sse-server
+EXPOSE 8000
