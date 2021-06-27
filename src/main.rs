@@ -63,7 +63,7 @@ async fn events(
 }
 
 #[post("/submit", data = "<encoded>")]
-fn post(encoded: String, messager: &State<messenger::Messenger>, config: &State<AppConfig>) {
+fn submit(encoded: String, messager: &State<messenger::Messenger>, config: &State<AppConfig>) {
     let decoded = branca_decode(&encoded, &config.key, config.signature_lifetime).unwrap();
     let request: Submission = rmp_serde::from_read_ref(&decoded).unwrap();
     for message in request.events {
@@ -94,5 +94,5 @@ async fn rocket() -> _ {
             signature_lifetime: 86400,
         })
         .attach(cors::CORS)
-        .mount("/", routes![post, events])
+        .mount("/", routes![submit, events])
 }
