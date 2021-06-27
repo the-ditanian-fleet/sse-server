@@ -2,6 +2,10 @@
 
 Simple [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) server that clients can connect to and applications can push to.
 
+## Quick start
+
+    docker run --env SSE_SECRET=`openssl rand -hex 32` tvdw/sse-server
+
 ## Origin
 
 I was building a web application in React (JS) and Flask (Python), and had a use case for sending events from the server to the client, which meant using WebSockets or SSE (or (long-)polling). On the client side SSE is great, but for servers it's a bit of work to handle the many concurrent connections involved in doing this. In the case of my web application I had to use Flask with `gevent`, a hack that makes Python less thread-bound, and in a way that routed all connections to the same webserver which prevents zero-downtime deployments (or events would be lost) and prevents using a highly available configuration behind a load balancer.
