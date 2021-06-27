@@ -2,7 +2,8 @@ FROM rust:1.53-alpine AS builder
 WORKDIR /sse-server
 RUN apk add --no-cache musl-dev
 RUN mkdir src && touch -d 1980-01-01 src/lib.rs
-COPY Cargo.lock Cargo.toml .
+COPY Cargo.lock .
+COPY Cargo.toml .
 RUN cargo build --release
 RUN rm -r src
 
