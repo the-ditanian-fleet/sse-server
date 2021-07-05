@@ -1,0 +1,4 @@
+Flask==2.0.1
+requests==2.25.1
+pybranca==0.4.0
+msgpack==0.6.2
